@@ -1,9 +1,9 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response, stream_with_context
 from flask_cors import CORS
 from dotenv import load_dotenv
 from pymongo import MongoClient
 from bson import ObjectId
-import os, csv, io, json, datetime, threading
+import os, csv, io, json, datetime, threading, queue as queue_module
 
 load_dotenv()
 
@@ -402,6 +402,112 @@ def test_all_integrations():
         results["telegram"] = {"ok": False, "error": str(e)}
 
     return jsonify(results)
+
+
+# ─── AI Agent Routes ─────────────────────────────────────────────────────────
+
+_agent_queues: dict[str, queue_module.Queue] = {}
+
+
+@app.route("/api/agent/run", methods=["POST"])
+def run_agent():
+    data = request.json or {}
+    prompt = data.get("prompt", "").strip()
+    brand_name = data.get("brand_name", "AgentStack")
+    channels = data.get("channels", [])
+    audience_id = data.get("audience_id", "")
+
+    if not prompt:
+        return jsonify({"error": "prompt is required"}), 400
+    if not channels:
+        return jsonify({"error": "select at least one channel"}), 400
+
+    audience = []
+    if audience_id:
+        aud_doc = audiences_col.find_one({"_id": ObjectId(audience_id)})
+        if aud_doc:
+            audience = aud_doc.get("records", [])
+
+    job_id = str(ObjectId())
+    q: queue_module.Queue = queue_module.Queue()
+    _agent_queues[job_id] = q
+
+    jobs_col.insert_one({
+        "_id": ObjectId(job_id),
+        "type": "agent",
+        "prompt": prompt,
+        "brand_name": brand_name,
+        "channels": channels,
+        "audience_id": audience_id,
+        "status": "running",
+        "events": [],
+        "started_at": now(),
+    })
+
+    def emit(event_type: str, event_data: dict):
+        event = {"type": event_type, "data": event_data, "ts": now()}
+        q.put(event)
+        jobs_col.update_one(
+            {"_id": ObjectId(job_id)},
+            {"$push": {"events": event}}
+        )
+
+    def run():
+        try:
+            from services.ai_agent import run_campaign_agent
+            run_campaign_agent(prompt, brand_name, channels, audience, emit)
+        except Exception as exc:
+            emit("error", {"message": str(exc)})
+        finally:
+            q.put(None)  # sentinel — closes the SSE stream
+            jobs_col.update_one(
+                {"_id": ObjectId(job_id)},
+                {"$set": {"status": "completed", "finished_at": now()}}
+            )
+
+    threading.Thread(target=run, daemon=True).start()
+    return jsonify({"job_id": job_id}), 202
+
+
+@app.route("/api/agent/stream/<job_id>")
+def stream_agent(job_id):
+    q = _agent_queues.get(job_id)
+
+    def generate():
+        if q is None:
+            # Job already done — replay from DB
+            job = jobs_col.find_one({"_id": ObjectId(job_id)})
+            if job:
+                for ev in job.get("events", []):
+                    yield f"data: {json.dumps(ev)}\n\n"
+            yield 'data: {"type":"end"}\n\n'
+            return
+
+        while True:
+            try:
+                event = q.get(timeout=30)
+                if event is None:
+                    yield 'data: {"type":"end"}\n\n'
+                    _agent_queues.pop(job_id, None)
+                    break
+                yield f"data: {json.dumps(event)}\n\n"
+            except queue_module.Empty:
+                yield ": keepalive\n\n"
+
+    return Response(
+        stream_with_context(generate()),
+        content_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.route("/api/agent/job/<job_id>")
+def get_agent_job(job_id):
+    job = jobs_col.find_one({"_id": ObjectId(job_id)})
+    if not job:
+        return jsonify({"error": "not found"}), 404
+    job["id"] = str(job.pop("_id"))
+    return jsonify(job)
 
 
 @app.route("/api/health", methods=["GET"])
