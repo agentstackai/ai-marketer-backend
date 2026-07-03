@@ -213,6 +213,55 @@ def broadcast_campaign(campaign_id):
                 results["video"] = {"error": str(e)}
                 results["youtube"] = {"error": str(e)}
 
+        # --- Twitter/X ---
+        if "twitter" in channels:
+            try:
+                from services.twitter_service import post_tweet, post_thread
+                tw_data = content.get("twitter", {})
+                use_thread = data.get("twitter_thread", False)
+                if use_thread and tw_data.get("thread"):
+                    res = post_thread(tw_data["thread"])
+                else:
+                    res = post_tweet(tw_data.get("tweet", ""))
+                results["twitter"] = res
+            except Exception as e:
+                results["twitter"] = {"error": str(e)}
+
+        # --- WhatsApp Business ---
+        if "whatsapp" in channels and audience:
+            try:
+                from services.whatsapp_service import send_campaign_messages
+                from services.ai_generator import personalize_whatsapp
+                wa_data = content.get("whatsapp", {})
+                res = send_campaign_messages(
+                    recipients=audience,
+                    message_template=wa_data.get("message", ""),
+                    personalize_fn=personalize_whatsapp
+                )
+                results["whatsapp"] = res
+            except Exception as e:
+                results["whatsapp"] = {"error": str(e)}
+
+        # --- Facebook Page ---
+        if "facebook" in channels:
+            try:
+                from services.facebook_service import post_text as fb_post_text
+                fb_data = content.get("facebook", {})
+                res = fb_post_text(fb_data.get("post", ""))
+                results["facebook"] = res
+            except Exception as e:
+                results["facebook"] = {"error": str(e)}
+
+        # --- Telegram Channel ---
+        if "telegram" in channels:
+            try:
+                from services.telegram_service import send_message as tg_send
+                tg_data = content.get("telegram", {})
+                res = tg_send(tg_data.get("message", ""))
+                results["telegram"] = res
+            except Exception as e:
+                results["telegram"] = {"error": str(e)}
+
         # Update job and campaign
         jobs_col.update_one(
             {"_id": ObjectId(job_id)},
@@ -327,6 +376,30 @@ def test_all_integrations():
         results["youtube"] = yt_test()
     except Exception as e:
         results["youtube"] = {"ok": False, "error": str(e)}
+
+    try:
+        from services.twitter_service import test_connection as tw_test
+        results["twitter"] = tw_test()
+    except Exception as e:
+        results["twitter"] = {"ok": False, "error": str(e)}
+
+    try:
+        from services.whatsapp_service import test_connection as wa_test
+        results["whatsapp"] = wa_test()
+    except Exception as e:
+        results["whatsapp"] = {"ok": False, "error": str(e)}
+
+    try:
+        from services.facebook_service import test_connection as fb_test
+        results["facebook"] = fb_test()
+    except Exception as e:
+        results["facebook"] = {"ok": False, "error": str(e)}
+
+    try:
+        from services.telegram_service import test_connection as tg_test
+        results["telegram"] = tg_test()
+    except Exception as e:
+        results["telegram"] = {"ok": False, "error": str(e)}
 
     return jsonify(results)
 

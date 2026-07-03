@@ -41,6 +41,24 @@ Generate all of the following content and return as a single JSON object:
     "tags": ["tag1", "tag2", "tag3", "...up to 10 tags"],
     "thumbnail_prompt": "Description of ideal YouTube thumbnail"
   }},
+  "twitter": {{
+    "tweet": "Single tweet (max 280 chars, punchy, include 2-3 hashtags, strong hook)",
+    "thread": [
+      "Tweet 1 of 3: Hook / problem statement (max 280 chars)",
+      "Tweet 2 of 3: Solution / key benefit (max 280 chars)",
+      "Tweet 3 of 3: CTA + hashtags (max 280 chars)"
+    ]
+  }},
+  "whatsapp": {{
+    "message": "WhatsApp message (conversational, concise, max 300 chars, include emoji, avoid markdown bold/italic)"
+  }},
+  "facebook": {{
+    "post": "Facebook Page post (2-3 paragraphs, engaging story-led format, include 3-5 hashtags at the end)",
+    "image_prompt": "Description of ideal image to accompany this Facebook post"
+  }},
+  "telegram": {{
+    "message": "Telegram channel message (supports Markdown, include *bold* highlights, bullet points with hyphens, max 500 chars, end with a CTA link placeholder [Learn more](URL))"
+  }},
   "video_script": {{
     "hook": "Opening 5-second attention grabber",
     "intro": "10-second brand introduction",
@@ -82,6 +100,20 @@ def personalize_email(template_html: str, recipient: dict) -> str:
 
 
 def personalize_sms(template: str, recipient: dict) -> str:
+    result = template
+    result = result.replace("{{name}}", recipient.get("name", "there").split()[0])
+    result = result.replace("{{company}}", recipient.get("company", ""))
+    return result
+
+
+def personalize_whatsapp(template: str, recipient: dict) -> str:
+    result = template
+    result = result.replace("{{name}}", recipient.get("name", "there").split()[0])
+    result = result.replace("{{company}}", recipient.get("company", ""))
+    return result
+
+
+def personalize_telegram(template: str, recipient: dict) -> str:
     result = template
     result = result.replace("{{name}}", recipient.get("name", "there").split()[0])
     result = result.replace("{{company}}", recipient.get("company", ""))
