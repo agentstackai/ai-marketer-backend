@@ -2,7 +2,8 @@ import anthropic
 import json
 import os
 
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+def _client():
+    return anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 SYSTEM_PROMPT = """You are an expert AI digital marketing strategist. Given a campaign prompt,
 you generate high-converting, platform-optimized marketing content. Always return valid JSON only."""
@@ -71,7 +72,7 @@ Generate all of the following content and return as a single JSON object:
 
 Make all content compelling, on-brand, and platform-appropriate. Return ONLY the JSON object, no other text."""
 
-    message = client.messages.create(
+    message = _client().messages.create(
         model="claude-sonnet-4-6",
         max_tokens=4096,
         system=SYSTEM_PROMPT,

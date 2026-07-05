@@ -6,7 +6,8 @@ import anthropic
 import json
 import os
 
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+def _client():
+    return anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 TOOLS = [
     {
@@ -140,7 +141,7 @@ def _generate_single_channel(channel: str, prompt: str, brand_name: str) -> dict
         "telegram": 'Return JSON: {"message":"Markdown ok (*bold*), bullet points with -, max 500 chars, end with [Learn more](URL)"}',
     }
 
-    resp = client.messages.create(
+    resp = _client().messages.create(
         model="claude-sonnet-4-6",
         max_tokens=2048,
         messages=[{
@@ -282,7 +283,7 @@ def run_campaign_agent(prompt: str, brand_name: str, channels: list, audience: l
     emit("start", {"message": f"Agent starting — {len(channels)} channels: {', '.join(channels)}"})
 
     for _ in range(25):  # max iterations guard
-        response = client.messages.create(
+        response = _client().messages.create(
             model="claude-sonnet-4-6",
             max_tokens=8096,
             system=SYSTEM_PROMPT,
